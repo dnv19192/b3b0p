@@ -3,11 +3,8 @@ import sys
 import threading
 
 def main():
-    address = input("Enter adress: ").split(":")
-    ip, port = address[0], int(address[1])
-
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind((ip, port))
+    server.bind(("0.0.0.0", 80))
     server.listen(0)
 
     print("Waiting on connections")
