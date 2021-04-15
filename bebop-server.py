@@ -4,7 +4,7 @@ import threading
 import time
 import os
 
-address = ("0.0.0.0", 3000)
+address = ("0.0.0.0", 3232)
 
 def print_menu():
     print("\n/-------BEBOP-------/\n")
@@ -36,9 +36,8 @@ def upload_file(file_name):
         with open(f"{file_name}", "rb") as file:
             file_data = file.read()
             send(file_data)
-            
-        done = recv().decode()
-        print(done)
+        is_done = recv().decode()
+        print(is_done)
     except OSError as e:
         print(e)
         send(b'')
@@ -48,7 +47,7 @@ def download_file(file_name):
     if not file_data:
         print("Could not download file...")
         return
-        
+
     try:
         file = open(f"{file_name}", "wb")
         file.write(file_data)
@@ -56,7 +55,7 @@ def download_file(file_name):
         send(b"DONE")
     except OSError as e:
         print(e)
-        
+
 def open_shell():
     while True:
         cmd = input("bebop#: ")
@@ -64,27 +63,26 @@ def open_shell():
         if cmd == "exit":
             send(cmd.encode())
             break
-            
+
         elif cmd[:2] == "dw":
             #Download
             print("Downloading...")
             send(cmd.encode())
-            
+
             file_name = cmd[3:]
             download_file(file_name)
-            
+
         elif cmd[:2] == "up":
             #Upload
             print("Uploading...")
             send(cmd.encode())
             file_name = cmd[3:]
             upload_file(file_name)
-            
-            
+
         elif cmd:
             send(cmd.encode())
             output = recv()
-            
+
             if output:
                 print(output.decode())
 
@@ -121,6 +119,7 @@ def main():
 
         elif choice == "4":
             keep_alive = input("Keep client alive? (Y or N): ")
+            print("Keeping client alive..." if keep_alive.lower() == "y" or keep_alive == "yes" else "Killing client connection...")
             send(keep_alive.encode())
             conn_to_client.shutdown(socket.SHUT_WR)
             conn_to_client.close()

