@@ -4,7 +4,7 @@ import threading
 import time
 import os
 
-address = ("0.0.0.0", 3232)
+address = ("0.0.0.0", 3000)
 
 def print_menu():
     print("\n/-------BEBOP-------/\n")
@@ -14,36 +14,36 @@ def print_menu():
     print("4.) Exit\n\n")
 
 def recv(buff_size=1024):
-    data_size = int(conn_to_client.recv(12).decode())
+    data_size = int(conn_to_client.recv(12).decode().rstrip())
+
     if not data_size:
         return None
 
-    data = bytes()
-    while len(data) < data_size:
-        data += conn_to_client.recv(buff_size)
+    data_buff = bytes()
+    while len(data_buff) < data_size:
+        data_buff += conn_to_client.recv(buff_size)
 
-    return data
-
+    return data_buff
 
 def send(data):
     header_size = 12
-    data_size = f"{len(data):^{header_size}}"
-    conn_to_client.send(data_size.encode())
-    conn_to_client.sendall(data)
+    data_size = f"{len(data):<{header_size}}"
+    conn_to_client.sendall(data_size.encode()+data)
+
 
 def upload_file(file_name):
     try:
         with open(f"{file_name}", "rb") as file:
             file_data = file.read()
             send(file_data)
-        is_done = recv().decode()
-        print(is_done)
+
+
     except OSError as e:
         print(e)
         send(b'')
 
 def download_file(file_name):
-    file_data = recv()
+    file_data = recv(buff_size=4096)
     if not file_data:
         print("Could not download file...")
         return
@@ -52,7 +52,7 @@ def download_file(file_name):
         file = open(f"{file_name}", "wb")
         file.write(file_data)
         file.close()
-        send(b"DONE")
+
     except OSError as e:
         print(e)
 
@@ -85,7 +85,8 @@ def open_shell():
 
             if output:
                 print(output.decode())
-
+            else:
+                print("\n", end="")
 
 def establish_connection(address):
     global conn_to_client
@@ -100,6 +101,7 @@ def establish_connection(address):
         print(f"Connection to {address[0]}:{address[1]} Established!")
     else:
         sys.exit("Failed to recieve connection to client...Exiting")
+
 
 def main():
     establish_connection(address)

