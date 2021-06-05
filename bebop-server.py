@@ -3,6 +3,9 @@ import sys
 import threading
 import time
 import os
+from pynput import keyboard
+
+from pynput.keyboard import *
 
 address = ("0.0.0.0", 3000)
 
@@ -56,37 +59,62 @@ def download_file(file_name):
     except OSError as e:
         print(e)
 
+
 def open_shell():
+    # shell_history_forward = []
+    # shell_history_backward = []
+    # def on_press(key):
+    #     lst_cmd = ""
+    #     if key == "Key.up":
+    #         if len(shell_history_forward) > 0:
+    #                 lst_cmd = shell_history_forward.pop()
+    #                 shell_history_backward.append(lst_cmd)
+    #     elif key == "Key.down":
+    #         if len(shell_history_backward) > 0:
+    #             lst_cmd = shell_history_backward.pop()
+    #             shell_history_forward.append(lst_cmd)
+                            
+    #     print(shell_history_forward)        
+    #     print(shell_history_backward)
+    # l = Listener(on_press=on_press)
+    # l.start()
+
+
     while True:
         cmd = input("bebop#: ")
 
-        if cmd == "exit":
-            send(cmd.encode())
-            break
+        if cmd:
+            if cmd == "exit":
+                send(cmd.encode())
+                break
 
-        elif cmd[:2] == "dw":
-            #Download
-            print("Downloading...")
-            send(cmd.encode())
+            elif cmd[:2] == "dw":
+                #Download
+                print("Downloading...")
+                send(cmd.encode())
 
-            file_name = cmd[3:]
-            download_file(file_name)
+                file_name = cmd[3:]
+                download_file(file_name)
 
-        elif cmd[:2] == "up":
-            #Upload
-            print("Uploading...")
-            send(cmd.encode())
-            file_name = cmd[3:]
-            upload_file(file_name)
+            elif cmd[:2] == "up":
+                #Upload
+                print("Uploading...")
+                send(cmd.encode())
+                file_name = cmd[3:]
+                upload_file(file_name)
 
-        elif cmd:
-            send(cmd.encode())
-            output = recv()
-
-            if output:
-                print(output.decode())
             else:
-                print("\n", end="")
+                send(cmd.encode())
+                output = recv()
+
+                if output:
+                    print(output.decode())
+
+
+            print("\n", end="")
+            shell_history_forward.append(cmd)
+
+    l.stop()
 
 def establish_connection(address):
     global conn_to_client

